@@ -1,7 +1,7 @@
 {
   "name": "forge",
   "description": "Detects the repo's stack and delivers matching Manicode prompts at the start of each chat.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "author": {
     "name": "Manicode Worldwide, Inc."
   },

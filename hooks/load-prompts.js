@@ -154,9 +154,10 @@ var require_state = __commonJS({
 var require_fetch_prompts = __commonJS({
   "fetch-prompts.js"(exports2, module2) {
     var API_KEY_VAR = "MANICODE_REGISTRY_API_KEY";
+    var DEFAULT_REGISTRY_URL = "https://manicode-context-registry.fly.dev";
     async function fetchPrompts2(stack) {
       if (stack.length === 0) return "";
-      const baseUrl = process.env.MANICODE_REGISTRY_URL || "http://localhost:3000";
+      const baseUrl = process.env.MANICODE_REGISTRY_URL || DEFAULT_REGISTRY_URL;
       const apiKey = process.env[API_KEY_VAR];
       if (!apiKey) throw new Error(`${API_KEY_VAR} is not set`);
       let response;
