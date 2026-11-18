@@ -134,7 +134,7 @@ var require_state = __commonJS({
         encoding: "utf8"
       }).trim();
     }
-    function detectAndStore2() {
+    function detectAndStore() {
       const root = repoRoot();
       const state = {
         stack: detectStack(root),
@@ -146,7 +146,7 @@ var require_state = __commonJS({
       writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
       return state;
     }
-    module2.exports = { detectAndStore: detectAndStore2 };
+    module2.exports = { detectAndStore, repoRoot };
   }
 });
 
@@ -155,8 +155,8 @@ var require_fetch_prompts = __commonJS({
   "fetch-prompts.js"(exports2, module2) {
     var API_KEY_VAR = "MANICODE_REGISTRY_API_KEY";
     var DEFAULT_REGISTRY_URL = "https://manicode-context-registry.fly.dev";
-    async function fetchPrompts2(stack) {
-      if (stack.length === 0) return "";
+    async function fetchPrompts(stack) {
+      if (stack.length === 0) return [];
       const baseUrl = process.env.MANICODE_REGISTRY_URL || DEFAULT_REGISTRY_URL;
       const apiKey = process.env[API_KEY_VAR];
       if (!apiKey) throw new Error(`${API_KEY_VAR} is not set`);
@@ -165,6 +165,7 @@ var require_fetch_prompts = __commonJS({
         response = await fetch(new URL("/api/prompts", baseUrl), {
           method: "POST",
           headers: {
+            Accept: "application/json",
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json"
           },
@@ -184,19 +185,75 @@ var require_fetch_prompts = __commonJS({
           `registry at ${baseUrl} responded ${response.status} for /api/prompts`
         );
       }
-      return response.text();
+      return response.json();
     }
-    module2.exports = { fetchPrompts: fetchPrompts2 };
+    module2.exports = { fetchPrompts };
+  }
+});
+
+// write-rule-files.js
+var require_write_rule_files = __commonJS({
+  "write-rule-files.js"(exports2, module2) {
+    var {
+      existsSync,
+      mkdirSync,
+      readdirSync,
+      readFileSync,
+      rmSync,
+      writeFileSync
+    } = require("fs");
+    var { join } = require("path");
+    var RULES_DIR = join(".claude", "rules", "forge");
+    function writeRuleFiles(root, prompts) {
+      const dir = join(root, RULES_DIR);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, ".gitignore"), "*\n");
+      const wanted = new Map(
+        prompts.map(({ technology, text }) => [`${technology}.md`, text])
+      );
+      let changed = false;
+      for (const [name, text] of wanted) {
+        const file = join(dir, name);
+        if (existsSync(file) && readFileSync(file, "utf8") === text) continue;
+        writeFileSync(file, text);
+        changed = true;
+      }
+      for (const name of readdirSync(dir)) {
+        if (name.endsWith(".md") && !wanted.has(name)) {
+          rmSync(join(dir, name));
+          changed = true;
+        }
+      }
+      return changed;
+    }
+    module2.exports = { writeRuleFiles };
+  }
+});
+
+// sync-prompts.js
+var require_sync_prompts = __commonJS({
+  "sync-prompts.js"(exports2, module2) {
+    var { detectAndStore, repoRoot } = require_state();
+    var { fetchPrompts } = require_fetch_prompts();
+    var { writeRuleFiles } = require_write_rule_files();
+    async function syncPrompts2() {
+      const prompts = await fetchPrompts(detectAndStore().stack);
+      return writeRuleFiles(repoRoot(), prompts);
+    }
+    module2.exports = { syncPrompts: syncPrompts2 };
   }
 });
 
 // hooks/load-prompts.js
-var { detectAndStore } = require_state();
-var { fetchPrompts } = require_fetch_prompts();
+var { syncPrompts } = require_sync_prompts();
+var RELOAD_NOTICE = {
+  systemMessage: "Manicode prompts updated. Run /clear to load them."
+};
 async function main() {
   try {
-    const prompts = await fetchPrompts(detectAndStore().stack);
-    if (prompts) process.stdout.write(prompts + "\n");
+    if (await syncPrompts()) {
+      process.stdout.write(JSON.stringify(RELOAD_NOTICE) + "\n");
+    }
   } catch (error) {
     const [reason] = error.message.split("\n");
     console.error(`forge: prompts not delivered: ${reason}`);
